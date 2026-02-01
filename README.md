@@ -1,4 +1,6 @@
 # se-cli
+[![CI](https://github.com/derandomize/se-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/derandomize/se-cli/actions/workflows/ci.yml)
+
 Простой интерпретатор командной строки на Rust. Проект в рамках курса по разработке ПО.
 
 ## Документация
