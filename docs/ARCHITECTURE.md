@@ -25,15 +25,15 @@
 
 ```mermaid
 flowchart LR
-  REPL[REPL / Shell loop] -->|&str (line)| LEX[Lexer<br/>tokenize with quote awareness]
-  LEX -->|Vec&lt;Token&gt;| PARSE[Parser<br/>Pipeline AST]
-  PARSE -->|PipelineAst| EXP[Expander<br/>$NAME + quote rules]
-  EXP -->|ExpandedPipeline| PLAN[Planner / Factory<br/>Builtin vs External]
-  PLAN -->|Vec&lt;Stage&gt;| EXEC[Executor<br/>run pipeline]
+  REPL["REPL / shell loop"] -->|"line (string)"| LEX["Lexer (quote-aware)"]
+  LEX -->|"tokens"| PARSE["Parser (Pipeline AST)"]
+  PARSE -->|"PipelineAst"| EXP["Expander ($NAME + quote rules)"]
+  EXP -->|"ExpandedPipeline"| PLAN["Planner / Factory (builtin vs external)"]
+  PLAN -->|"stages"| EXEC["Executor (run pipeline)"]
   EXEC --> REPL
 
-  REPL -->|set/get| ENV[Environment Store<br/>shell vars]
-  EXEC -->|read overlay| ENV
+  REPL -->|"set/get"| ENV["Environment store (shell vars)"]
+  EXEC -->|"read overlay"| ENV
 
   subgraph Builtins
     BREG[BuiltinRegistry]
@@ -50,7 +50,7 @@ flowchart LR
   end
 
   PLAN --> BREG
-  PLAN --> OS[std::process::Command<br/>external programs]
+  PLAN --> OS["External programs (std::process::Command)"]
 ```
 
 ## Поток выполнения (сквозной)
