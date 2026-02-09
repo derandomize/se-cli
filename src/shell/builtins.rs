@@ -32,28 +32,34 @@ pub(crate) fn run_builtin(
     io: &mut IoStreams<'_>,
 ) -> ShellResult<ShellControl> {
     match builtin {
-        Builtin::Echo => {
-            if !args.is_empty() {
-                write!(io.stdout, "{}", args.join(" ")).map_err(ShellError::Io)?;
-            }
-            writeln!(io.stdout).map_err(ShellError::Io)?;
-            Ok(ShellControl::Continue(0))
-        }
-        Builtin::Pwd => {
-            let dir = std::env::current_dir().map_err(ShellError::Io)?;
-            writeln!(io.stdout, "{}", dir.display()).map_err(ShellError::Io)?;
-            Ok(ShellControl::Continue(0))
-        }
-        Builtin::Exit => {
-            let code = args
-                .first()
-                .and_then(|s| s.parse::<i32>().ok())
-                .unwrap_or(0);
-            Ok(ShellControl::Exit(code))
-        }
+        Builtin::Echo => run_echo(args, io),
+        Builtin::Pwd => run_pwd(io),
+        Builtin::Exit => run_exit(args),
         Builtin::Cat => run_cat(args, io),
         Builtin::Wc => run_wc(args, io),
     }
+}
+
+fn run_echo(args: &[String], io: &mut IoStreams<'_>) -> ShellResult<ShellControl> {
+    if !args.is_empty() {
+        write!(io.stdout, "{}", args.join(" ")).map_err(ShellError::Io)?;
+    }
+    writeln!(io.stdout).map_err(ShellError::Io)?;
+    Ok(ShellControl::Continue(0))
+}
+
+fn run_pwd(io: &mut IoStreams<'_>) -> ShellResult<ShellControl> {
+    let dir = std::env::current_dir().map_err(ShellError::Io)?;
+    writeln!(io.stdout, "{}", dir.display()).map_err(ShellError::Io)?;
+    Ok(ShellControl::Continue(0))
+}
+
+fn run_exit(args: &[String]) -> ShellResult<ShellControl> {
+    let code = args
+        .first()
+        .and_then(|s| s.parse::<i32>().ok())
+        .unwrap_or(0);
+    Ok(ShellControl::Exit(code))
 }
 
 fn run_cat(args: &[String], io: &mut IoStreams<'_>) -> ShellResult<ShellControl> {
