@@ -25,14 +25,15 @@
 
 ```mermaid
 flowchart LR
-  REPL["REPL / shell loop"] -->|"line (string)"| LEX["Lexer (quote-aware)"]
+  REPL["REPL / shell loop"] -->|"line (string)"| EXP["Expander ($NAME + quote rules)"]
+  EXP -->|"expanded line"| LEX["Lexer (quote-aware)"]
   LEX -->|"tokens"| PARSE["Parser (Pipeline AST)"]
-  PARSE -->|"PipelineAst"| EXP["Expander ($NAME + quote rules)"]
-  EXP -->|"ExpandedPipeline"| PLAN["Planner / Factory (builtin vs external)"]
+  PARSE -->|"PipelineAst"| PLAN["Planner / Factory (builtin vs external)"]
   PLAN -->|"stages"| EXEC["Executor (run pipeline)"]
   EXEC --> REPL
 
   REPL -->|"set/get"| ENV["Environment store (shell vars)"]
+  EXP -->|"read"| ENV
   EXEC -->|"read overlay"| ENV
 
   subgraph Builtins
@@ -56,9 +57,10 @@ flowchart LR
 ## Поток выполнения (сквозной)
 
 Для каждой введённой строки:
-1. **Лексер** превращает сырой текст в поток токенов: `Word` (с учётом кавычек) и `Pipe`.
-2. **Парсер** строит объектную модель: `Pipeline = [CommandSpec, ...]`.
-3. **Expander** применяет подстановки `$NAME` по правилам кавычек и выполняет “quote removal”, выдавая финальные строки аргументов.
+1. **Expander** применяет подстановки `$NAME` по правилам кавычек, возвращая строку, где `$NAME` заменены на значения.
+  - На этом этапе важно, что подстановка выполняется **до токенизации**, чтобы работали случаи вроде `$x$y`.
+2. **Лексер** превращает текст в поток токенов: `Word` (с учётом кавычек) и `Pipe`.
+3. **Парсер** строит объектную модель: `Pipeline = [CommandSpec, ...]`.
 4. **Planner/Factory** решает, чем является каждая команда: builtin или external, а также применяет правила для присваиваний окружения.
 5. **Executor** соединяет стадии пайплайна потоками и выполняет их, собирая коды возврата.
 6. **REPL** печатает диагностику (если нужно), сохраняет `last_status`, продолжает цикл или завершает работу по `exit`.
@@ -68,7 +70,7 @@ flowchart LR
 - **Кавычки**:
   - `'...'` (single quotes): внутри **ничего не интерпретируется**, включая `$`.
   - `"..."` (double quotes): `$NAME` **интерпретируется**, а пробелы внутри — часть аргумента.
-  - кавычки — часть синтаксиса и удаляются на этапе “quote removal”.
+  - кавычки — часть синтаксиса; удаляются на этапе токенизации (quote removal), после того как expander уже отработал.
 - **Окружение**:
   - строка из одних присваиваний (например `x=1 y=2`) изменяет **shell environment**;
   - присваивания перед командой (например `x=1 wc file`) действуют **только для этой команды** (временное окружение).

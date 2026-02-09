@@ -1,3 +1,3 @@
 fn main() {
-    // Пока пусто
+    std::process::exit(se_cli::run());
 }
