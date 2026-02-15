@@ -2,27 +2,30 @@
 
 ## Основные сущности (объектная модель)
 
-- **`PipelineAst`**: список стадий пайплайна, каждая стадия — `SimpleCommandAst`.
-- **`SimpleCommandAst`**:
-  - `assignments: Vec<AssignmentAst>` — ведущие `NAME=value` перед командой;
-  - `argv: Vec<WordAst>` — имя команды и аргументы (ещё с quote‑структурой до расширений).
-- **`WordAst`**: одно “слово” как конкатенация частей (для случаев вроде `$x$y`):
-  - `parts: Vec<WordPartAst>`
-- **`WordPartAst`**:
-  - `Literal { text, quoting }`
-  - `Var { name, quoting }`
-  - где `quoting ∈ {Unquoted, SingleQuoted, DoubleQuoted}`.
+Порядок стадий такой:
 
-> Принцип: **пайпы и пробелы — структурные только вне кавычек**, а внутри кавычек входят в литерал.
+1) `Expander` выполняет `$NAME` в сырой строке
+2) `Lexer` режет на слова и `|` с учётом кавычек
+3) `Parser` строит `PipelineAst`
+
+Основные структуры:
+
+- **`Token`**: `Word(String)` или `Pipe`
+- **`PipelineAst`**: список стадий пайплайна, каждая стадия — `SimpleCommandAst`
+- **`SimpleCommandAst`**:
+  - `assignments: Vec<AssignmentAst>` — ведущие `NAME=value` перед командой
+  - `argv: Vec<String>` — имя команды и аргументы (после expand + quote removal)
+
+Принцип: **пайпы и пробелы — структурные только вне кавычек**, а внутри кавычек входят в литерал.
 
 ## Компоненты и интерфейсы (Rust модули)
 
 Предлагаемая модульная структура (без реализации деталей на этом этапе):
 
 - `repl/` — чтение строк, цикл, печать ошибок
-- `lex/` — `Lexer` → `Vec<Token>`
+- `expand/` — `Expander` применяет `$NAME` к строке, возвращает новую строку
+- `lex/` — `Lexer` → `Vec<Token>` (quote-aware, делает quote removal)
 - `parse/` — `Parser` → `PipelineAst`
-- `expand/` — `Expander` применяет `$NAME` и “quote removal”, возвращает `ExpandedPipeline`
 - `env/` — `EnvStore` (shell vars) + “temporary overlay” для `NAME=value cmd`
 - `exec/` — `Executor` (пайпы, запуск стадий)
 - `builtins/` — реализации встроенных команд + `BuiltinRegistry`
