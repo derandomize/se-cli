@@ -108,6 +108,10 @@ fn run_cat(args: &[String], io: &mut IoStreams<'_>) -> ShellResult<ShellControl>
 /// - 1: ошибка чтения файла
 /// - 2: неверное число аргументов
 fn run_wc(args: &[String], io: &mut IoStreams<'_>) -> ShellResult<ShellControl> {
+    if args.is_empty() {
+        writeln!(io.stderr, "wc: missing file operand").map_err(ShellError::Io)?;
+        return Ok(ShellControl::Continue(2));
+    }
     if args.len() != 1 {
         writeln!(io.stderr, "wc: expected exactly one file path").map_err(ShellError::Io)?;
         return Ok(ShellControl::Continue(2));
