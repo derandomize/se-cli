@@ -7,21 +7,34 @@ use super::parser::ParseError;
 /// Спецификация команды после разбора строки.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CommandSpec {
+    /// Имя команды (builtin или внешняя).
     pub(crate) name: String,
+    /// Аргументы команды (без имени).
     pub(crate) args: Vec<String>,
+}
+
+/// Конвейер команд (pipeline) вида `cmd1 | cmd2 | cmd3`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Pipeline {
+    pub(crate) commands: Vec<CommandSpec>,
 }
 
 /// Результат исполнения внешней команды.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct RunResult {
+    /// Код возврата процесса.
     pub(crate) exit_code: i32,
+    /// Содержимое stdout процесса.
     pub(crate) stdout: Vec<u8>,
+    /// Содержимое stderr процесса.
     pub(crate) stderr: Vec<u8>,
 }
 
 /// Потоки вывода интерпретатора.
 pub(crate) struct IoStreams<'a> {
+    /// Поток stdout интерпретатора.
     pub(crate) stdout: &'a mut dyn std::io::Write,
+    /// Поток stderr интерпретатора.
     pub(crate) stderr: &'a mut dyn std::io::Write,
 }
 
