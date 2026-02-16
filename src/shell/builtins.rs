@@ -2,6 +2,16 @@
 
 use super::types::{IoStreams, ShellControl, ShellError, ShellResult};
 
+fn io_error_message(e: &std::io::Error) -> String {
+    // `std::io::Error` форматируется так: "No such file or directory (os error 2)".
+    // Для консистентности сообщений убираем числовой суффикс ОС.
+    let s = e.to_string();
+    match s.split_once(" (os error") {
+        Some((prefix, _)) => prefix.to_string(),
+        None => s,
+    }
+}
+
 /// Перечисление встроенных команд, поддерживаемых на этом этапе.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Builtin {
@@ -36,12 +46,25 @@ pub(crate) fn run_builtin(
     args: &[String],
     io: &mut IoStreams<'_>,
 ) -> ShellResult<ShellControl> {
+    run_builtin_with_input(builtin, args, None, io)
+}
+
+/// Выполняет builtin-команду, опционально получая stdin (для пайпов).
+///
+/// На этом этапе stdin используется только для тех команд, для которых это нужно
+/// в пайплайнах (например, `wc` без аргументов).
+pub(crate) fn run_builtin_with_input(
+    builtin: Builtin,
+    args: &[String],
+    stdin: Option<&[u8]>,
+    io: &mut IoStreams<'_>,
+) -> ShellResult<ShellControl> {
     match builtin {
         Builtin::Echo => run_echo(args, io),
         Builtin::Pwd => run_pwd(io),
         Builtin::Exit => run_exit(args),
-        Builtin::Cat => run_cat(args, io),
-        Builtin::Wc => run_wc(args, io),
+        Builtin::Cat => run_cat(args, stdin, io),
+        Builtin::Wc => run_wc(args, stdin, io),
     }
 }
 
@@ -78,10 +101,19 @@ fn run_exit(args: &[String]) -> ShellResult<ShellControl> {
 /// - 0: все файлы прочитаны успешно
 /// - 1: хотя бы один файл не прочитан
 /// - 2: не передан ни один путь
-fn run_cat(args: &[String], io: &mut IoStreams<'_>) -> ShellResult<ShellControl> {
+fn run_cat(
+    args: &[String],
+    stdin: Option<&[u8]>,
+    io: &mut IoStreams<'_>,
+) -> ShellResult<ShellControl> {
     if args.is_empty() {
-        writeln!(io.stderr, "cat: missing file operand").map_err(ShellError::Io)?;
-        return Ok(ShellControl::Continue(2));
+        if let Some(input) = stdin {
+            io.stdout.write_all(input).map_err(ShellError::Io)?;
+            return Ok(ShellControl::Continue(0));
+        } else {
+            writeln!(io.stderr, "cat: missing file operand").map_err(ShellError::Io)?;
+            return Ok(ShellControl::Continue(2));
+        }
     }
 
     let mut exit_code = 0;
@@ -91,7 +123,8 @@ fn run_cat(args: &[String], io: &mut IoStreams<'_>) -> ShellResult<ShellControl>
                 io.stdout.write_all(&bytes).map_err(ShellError::Io)?;
             }
             Err(e) => {
-                writeln!(io.stderr, "cat: {path}: {e}").map_err(ShellError::Io)?;
+                let msg = io_error_message(&e);
+                writeln!(io.stderr, "cat: {path}: {msg}").map_err(ShellError::Io)?;
                 exit_code = 1;
             }
         }
@@ -107,8 +140,18 @@ fn run_cat(args: &[String], io: &mut IoStreams<'_>) -> ShellResult<ShellControl>
 /// - 0: успех
 /// - 1: ошибка чтения файла
 /// - 2: неверное число аргументов
-fn run_wc(args: &[String], io: &mut IoStreams<'_>) -> ShellResult<ShellControl> {
+fn run_wc(
+    args: &[String],
+    stdin: Option<&[u8]>,
+    io: &mut IoStreams<'_>,
+) -> ShellResult<ShellControl> {
     if args.is_empty() {
+        if let Some(input) = stdin {
+            let (line_count, word_count, byte_count) = count_wc(input);
+            writeln!(io.stdout, "{line_count} {word_count} {byte_count}")
+                .map_err(ShellError::Io)?;
+            return Ok(ShellControl::Continue(0));
+        }
         writeln!(io.stderr, "wc: missing file operand").map_err(ShellError::Io)?;
         return Ok(ShellControl::Continue(2));
     }
@@ -121,16 +164,22 @@ fn run_wc(args: &[String], io: &mut IoStreams<'_>) -> ShellResult<ShellControl> 
     let bytes = match std::fs::read(path) {
         Ok(b) => b,
         Err(e) => {
-            writeln!(io.stderr, "wc: {path}: {e}").map_err(ShellError::Io)?;
+            let msg = io_error_message(&e);
+            writeln!(io.stderr, "wc: {path}: {msg}").map_err(ShellError::Io)?;
             return Ok(ShellControl::Continue(1));
         }
     };
 
-    let byte_count = bytes.len();
-    let text = String::from_utf8_lossy(&bytes);
-    let line_count = text.lines().count();
-    let word_count = text.split_whitespace().count();
+    let (line_count, word_count, byte_count) = count_wc(&bytes);
 
     writeln!(io.stdout, "{line_count} {word_count} {byte_count}").map_err(ShellError::Io)?;
     Ok(ShellControl::Continue(0))
+}
+
+fn count_wc(bytes: &[u8]) -> (usize, usize, usize) {
+    let byte_count = bytes.len();
+    let text = String::from_utf8_lossy(bytes);
+    let line_count = text.lines().count();
+    let word_count = text.split_whitespace().count();
+    (line_count, word_count, byte_count)
 }

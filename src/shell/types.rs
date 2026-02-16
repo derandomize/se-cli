@@ -13,6 +13,12 @@ pub(crate) struct CommandSpec {
     pub(crate) args: Vec<String>,
 }
 
+/// Конвейер команд (pipeline) вида `cmd1 | cmd2 | cmd3`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Pipeline {
+    pub(crate) commands: Vec<CommandSpec>,
+}
+
 /// Результат исполнения внешней команды.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct RunResult {
