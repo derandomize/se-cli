@@ -37,7 +37,7 @@ fn cat_prints_file_contents() {
     std::io::Write::write_all(&mut tmp, b"hello\n").unwrap();
     let path = tmp.path().to_string_lossy();
 
-    let (_code, out, err) = run_with_input(&format!("cat {path}\nexit\n"));
+    let (_code, out, err) = run_with_input(&format!("cat \"{path}\"\nexit\n"));
     assert_eq!(out, "hello\n");
     assert!(err.is_empty());
 }
@@ -48,9 +48,56 @@ fn wc_counts_lines_words_bytes() {
     std::io::Write::write_all(&mut tmp, b"a b\nc\n").unwrap();
     let path = tmp.path().to_string_lossy();
 
-    let (_code, out, err) = run_with_input(&format!("wc {path}\nexit\n"));
+    let (_code, out, err) = run_with_input(&format!("wc \"{path}\"\nexit\n"));
     assert_eq!(out.lines().next().unwrap(), "2 3 6");
     assert!(err.is_empty());
+}
+
+#[test]
+fn pipelines_work_with_builtins() {
+    let (_code, out, err) = run_with_input("echo 123 | wc\nexit\n");
+    assert_eq!(out.lines().next().unwrap(), "1 1 4");
+    assert!(err.is_empty());
+}
+
+#[test]
+fn cat_can_forward_stdin_in_pipeline() {
+    let (_code, out, err) = run_with_input("echo hi | cat | wc\nexit\n");
+    assert_eq!(out.lines().next().unwrap(), "1 1 3");
+    assert!(err.is_empty());
+}
+
+#[test]
+fn expansion_works_with_assignments_in_same_line() {
+    let (_code, out, err) = run_with_input("x=ex y=it echo $x$y\nexit\n");
+    assert_eq!(out.lines().next().unwrap(), "exit");
+    assert!(err.is_empty());
+}
+
+#[test]
+fn cat_to_wc_pipeline_counts_file_contents() {
+    let mut tmp = NamedTempFile::new().unwrap();
+    std::io::Write::write_all(&mut tmp, b"a b\nc\n").unwrap();
+    let path = tmp.path().to_string_lossy();
+
+    let (_code, out, err) = run_with_input(&format!("cat \"{path}\" | wc\nexit\n"));
+    assert_eq!(out.lines().next().unwrap(), "2 3 6");
+    assert!(err.is_empty());
+}
+
+#[test]
+fn exit_in_pipeline_is_rejected_and_does_not_terminate_repl() {
+    let (code, _out, err) = run_with_input("echo hi | exit\nexit\n");
+    assert_eq!(code, 0);
+    assert!(err.contains("exit: cannot be used in pipeline"));
+}
+
+#[test]
+fn parse_error_is_reported_for_empty_pipeline_segment() {
+    let (code, _out, err) = run_with_input("echo hi | | wc\nexit\n");
+    assert_eq!(code, 0);
+    assert!(err.contains("Parse error"));
+    assert!(err.contains("empty pipeline segment"));
 }
 
 #[test]

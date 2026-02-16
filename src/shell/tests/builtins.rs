@@ -96,6 +96,7 @@ fn cat_nonexistent_file_sets_exit_code_1() {
     assert_eq!(control, ShellControl::Continue(1));
     assert!(out.is_empty());
     assert!(err.starts_with("cat:"));
+    assert!(!err.to_lowercase().contains("os error"));
 }
 
 #[test]
@@ -129,4 +130,5 @@ fn wc_nonexistent_file_sets_exit_code_1() {
     assert_eq!(control, ShellControl::Continue(1));
     assert!(out.is_empty());
     assert!(err.starts_with("wc:"));
+    assert!(!err.to_lowercase().contains("os error"));
 }
