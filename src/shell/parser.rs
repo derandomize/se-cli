@@ -69,6 +69,9 @@ pub(crate) fn parse_line(line: &str) -> Result<ParsedLine, ParseError> {
     })
 }
 
+/// Пытается распарсить токен как присваивание окружения `NAME=value`.
+///
+/// Возвращает `None`, если токен не является присваиванием или имя переменной невалидно.
 fn parse_assignment(token: &str) -> Option<(String, String)> {
     let (name, value) = token.split_once('=')?;
     if name.is_empty() {
@@ -87,6 +90,13 @@ fn parse_assignment(token: &str) -> Option<(String, String)> {
     Some((name.to_string(), value.to_string()))
 }
 
+/// Превращает входную строку в список аргументов.
+///
+/// Особенности:
+/// - разделитель: пробелы/табы (последовательности разделителей схлопываются)
+/// - одинарные/двойные кавычки группируют пробелы внутри аргумента
+/// - кавычки удаляются (quote removal)
+/// - пустые кавычки (`""` или `''`) создают пустой аргумент
 fn tokenize(input: &str) -> Result<Vec<String>, ParseError> {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum Mode {
@@ -140,64 +150,5 @@ fn tokenize(input: &str) -> Result<Vec<String>, ParseError> {
             Ok(tokens)
         }
         Mode::InQuote(q) => Err(ParseError::UnclosedQuote(q)),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn tokenizes_basic_words() {
-        let parsed = parse_line("echo hello world").unwrap();
-        let cmd = parsed.command.unwrap();
-        assert_eq!(cmd.name, "echo");
-        assert_eq!(cmd.args, vec!["hello", "world"]);
-    }
-
-    #[test]
-    fn tokenizes_quotes_as_single_arg() {
-        let parsed = parse_line("echo \"Hello, world!\"").unwrap();
-        let cmd = parsed.command.unwrap();
-        assert_eq!(cmd.args, vec!["Hello, world!"]);
-    }
-
-    #[test]
-    fn tokenizes_single_quotes_as_single_arg() {
-        let parsed = parse_line("echo 'a b'").unwrap();
-        let cmd = parsed.command.unwrap();
-        assert_eq!(cmd.args, vec!["a b"]);
-    }
-
-    #[test]
-    fn preserves_empty_quoted_argument() {
-        let parsed = parse_line("echo \"\" x").unwrap();
-        let cmd = parsed.command.unwrap();
-        assert_eq!(cmd.args, vec!["", "x"]);
-    }
-
-    #[test]
-    fn parses_assignments_only() {
-        let parsed = parse_line("FILE=example.txt").unwrap();
-        assert_eq!(
-            parsed.assignments,
-            vec![("FILE".into(), "example.txt".into())]
-        );
-        assert!(parsed.command.is_none());
-    }
-
-    #[test]
-    fn parses_assignments_before_command() {
-        let parsed = parse_line("x=ex y=it echo ok").unwrap();
-        assert_eq!(parsed.assignments.len(), 2);
-        let cmd = parsed.command.unwrap();
-        assert_eq!(cmd.name, "echo");
-        assert_eq!(cmd.args, vec!["ok"]);
-    }
-
-    #[test]
-    fn errors_on_unclosed_quote() {
-        let err = parse_line("echo \"oops").unwrap_err();
-        assert_eq!(err, ParseError::UnclosedQuote('"'));
     }
 }

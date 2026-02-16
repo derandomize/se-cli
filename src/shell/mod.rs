@@ -24,6 +24,7 @@ struct ShellState {
 }
 
 impl ShellState {
+    /// Инициализирует состояние окружением текущего процесса.
     fn new_from_process_env() -> Self {
         let mut env = HashMap::new();
         for (k, v) in std::env::vars() {
@@ -32,6 +33,7 @@ impl ShellState {
         Self { env }
     }
 
+    /// Применяет список присваиваний `NAME=value` к окружению интерпретатора.
     fn apply_assignments(&mut self, assignments: &[(String, String)]) {
         for (k, v) in assignments {
             self.env.insert(k.clone(), v.clone());
@@ -76,12 +78,17 @@ pub(crate) fn run_repl<R: std::io::Read, W1: std::io::Write, W2: std::io::Write>
     0
 }
 
+/// Обрабатывает одну строку ввода: trim → parse → apply env → execute.
+///
+/// Возвращает управляющее действие (продолжить или выйти) либо ошибку,
+/// которую REPL напечатает в stderr.
 fn run_single_line(
     executor: &StdProcessExecutor,
     state: &mut ShellState,
     line: &str,
     io: &mut IoStreams<'_>,
 ) -> ShellResult<ShellControl> {
+    // Выполняет одну введенную строку: trim -> parse -> apply env -> builtin/external.
     let trimmed = line.trim();
     if trimmed.is_empty() {
         return Ok(ShellControl::Continue(0));
@@ -97,12 +104,17 @@ fn run_single_line(
     run_command(executor, state, command, io)
 }
 
+/// Выполняет распарсенную команду.
+///
+/// Если имя совпадает с builtin — вызывает builtin-реализацию.
+/// Иначе запускает внешний процесс и прокидывает его stdout/stderr наружу.
 fn run_command(
     executor: &StdProcessExecutor,
     state: &mut ShellState,
     command: CommandSpec,
     io: &mut IoStreams<'_>,
 ) -> ShellResult<ShellControl> {
+    // Выполняет уже распарсенную команду (builtin или внешний процесс).
     if let Some(builtin) = Builtin::from_name(&command.name) {
         return builtins::run_builtin(builtin, &command.args, io);
     }

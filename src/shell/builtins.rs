@@ -13,6 +13,7 @@ pub(crate) enum Builtin {
 }
 
 impl Builtin {
+    /// Возвращает builtin по имени команды (если она поддерживается).
     pub(crate) fn from_name(name: &str) -> Option<Self> {
         match name {
             "cat" => Some(Builtin::Cat),
@@ -26,6 +27,10 @@ impl Builtin {
 }
 
 /// Выполняет builtin-команду.
+///
+/// Возвращает:
+/// - `ShellControl::Continue(code)` для продолжения REPL (где `code` — exit code команды)
+/// - `ShellControl::Exit(code)` для завершения REPL
 pub(crate) fn run_builtin(
     builtin: Builtin,
     args: &[String],
@@ -40,6 +45,7 @@ pub(crate) fn run_builtin(
     }
 }
 
+/// Печатает аргументы, разделяя их пробелами, и перевод строки в конце.
 fn run_echo(args: &[String], io: &mut IoStreams<'_>) -> ShellResult<ShellControl> {
     if !args.is_empty() {
         write!(io.stdout, "{}", args.join(" ")).map_err(ShellError::Io)?;
@@ -48,12 +54,16 @@ fn run_echo(args: &[String], io: &mut IoStreams<'_>) -> ShellResult<ShellControl
     Ok(ShellControl::Continue(0))
 }
 
+/// Печатает текущую рабочую директорию и перевод строки.
 fn run_pwd(io: &mut IoStreams<'_>) -> ShellResult<ShellControl> {
     let dir = std::env::current_dir().map_err(ShellError::Io)?;
     writeln!(io.stdout, "{}", dir.display()).map_err(ShellError::Io)?;
     Ok(ShellControl::Continue(0))
 }
 
+/// Завершает REPL.
+///
+/// Если указан аргумент, он трактуется как код возврата (i32). Некорректный аргумент -> 0.
 fn run_exit(args: &[String]) -> ShellResult<ShellControl> {
     let code = args
         .first()
@@ -62,6 +72,12 @@ fn run_exit(args: &[String]) -> ShellResult<ShellControl> {
     Ok(ShellControl::Exit(code))
 }
 
+/// Выводит содержимое файлов подряд.
+///
+/// Коды возврата:
+/// - 0: все файлы прочитаны успешно
+/// - 1: хотя бы один файл не прочитан
+/// - 2: не передан ни один путь
 fn run_cat(args: &[String], io: &mut IoStreams<'_>) -> ShellResult<ShellControl> {
     if args.is_empty() {
         writeln!(io.stderr, "cat: missing file operand").map_err(ShellError::Io)?;
@@ -83,6 +99,14 @@ fn run_cat(args: &[String], io: &mut IoStreams<'_>) -> ShellResult<ShellControl>
     Ok(ShellControl::Continue(exit_code))
 }
 
+/// Печатает количество строк/слов/байт для одного файла.
+///
+/// Формат вывода: `<lines> <words> <bytes>`.
+///
+/// Коды возврата:
+/// - 0: успех
+/// - 1: ошибка чтения файла
+/// - 2: неверное число аргументов
 fn run_wc(args: &[String], io: &mut IoStreams<'_>) -> ShellResult<ShellControl> {
     if args.len() != 1 {
         writeln!(io.stderr, "wc: expected exactly one file path").map_err(ShellError::Io)?;

@@ -9,6 +9,7 @@ use super::types::{RunResult, ShellError, ShellResult};
 pub(crate) struct StdProcessExecutor;
 
 impl StdProcessExecutor {
+    /// Создает новый исполнитель внешних команд.
     pub(crate) fn new() -> Self {
         Self
     }
@@ -20,6 +21,8 @@ impl StdProcessExecutor {
         args: &[String],
         env: &HashMap<String, String>,
     ) -> ShellResult<RunResult> {
+        // Очищаем env и передаем ровно то окружение, которое хранит ShellState.
+        // Так тесты и поведение шелла остаются детерминированными.
         let mut cmd = Command::new(program);
         cmd.args(args);
         cmd.env_clear();
