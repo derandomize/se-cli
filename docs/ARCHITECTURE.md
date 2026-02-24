@@ -5,7 +5,7 @@
 
 ## Цели
 
-- **Поддерживаемые команды (builtins)**: `cat`, `echo`, `wc`, `pwd`, `exit`.
+- **Поддерживаемые команды (builtins)**: `cat`, `echo`, `grep`, `wc`, `pwd`, `exit`.
 - **Поддерживаемые возможности языка**:
   - **кавычки**: одинарные (full quoting) и двойные (weak quoting);
   - **окружение**: присваивания `NAME=value`, подстановка `$NAME`;
@@ -24,34 +24,44 @@
 ## Компонентная схема
 
 ```mermaid
-flowchart LR
-  REPL["REPL / shell loop"] -->|"line (string)"| EXP["Expander ($NAME + quote rules)"]
-  EXP -->|"expanded line"| LEX["Lexer (quote-aware)"]
-  LEX -->|"tokens"| PARSE["Parser (Pipeline AST)"]
-  PARSE -->|"PipelineAst"| PLAN["Planner / Factory (builtin vs external)"]
-  PLAN -->|"stages"| EXEC["Executor (run pipeline)"]
-  EXEC --> REPL
+classDiagram
+  class REPL
+  class Expander
+  class Lexer
+  class Parser
+  class Planner
+  class Executor
+  class EnvStore
+  class BuiltinRegistry
+  class ExternalProgram
 
-  REPL -->|"set/get"| ENV["Environment store (shell vars)"]
-  EXP -->|"read"| ENV
-  EXEC -->|"read overlay"| ENV
+  class Cat
+  class Echo
+  class Grep
+  class Wc
+  class Pwd
+  class Exit
 
-  subgraph Builtins
-    BREG[BuiltinRegistry]
-    BCAT[cat]
-    BECHO[echo]
-    BWC[wc]
-    BPWD[pwd]
-    BEXIT[exit]
-    BREG --> BCAT
-    BREG --> BECHO
-    BREG --> BWC
-    BREG --> BPWD
-    BREG --> BEXIT
-  end
+  REPL --> Expander : line
+  Expander --> Lexer : expanded line
+  Lexer --> Parser : tokens
+  Parser --> Planner : Pipeline AST
+  Planner --> Executor : stages
+  Executor --> REPL : status
 
-  PLAN --> BREG
-  PLAN --> OS["External programs (std::process::Command)"]
+  REPL --> EnvStore : set/get
+  Expander --> EnvStore : read
+  Executor --> EnvStore : read overlay
+
+  Planner --> BuiltinRegistry : lookup
+  Planner --> ExternalProgram : std.process.Command
+
+  BuiltinRegistry --> Cat
+  BuiltinRegistry --> Echo
+  BuiltinRegistry --> Grep
+  BuiltinRegistry --> Wc
+  BuiltinRegistry --> Pwd
+  BuiltinRegistry --> Exit
 ```
 
 ## Поток выполнения (сквозной)
