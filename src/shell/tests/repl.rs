@@ -68,6 +68,35 @@ fn cat_can_forward_stdin_in_pipeline() {
 }
 
 #[test]
+fn grep_can_read_from_stdin_in_pipeline() {
+    let (_code, out, err) = run_with_input("echo hi | grep hi\nexit\n");
+    assert_eq!(out, "hi\n");
+    assert!(err.is_empty());
+}
+
+#[test]
+fn grep_after_context_works_in_repl() {
+    let mut tmp = NamedTempFile::new().unwrap();
+    std::io::Write::write_all(&mut tmp, b"0\nMATCH\n2\n").unwrap();
+    let path = tmp.path().to_string_lossy();
+
+    let (_code, out, err) = run_with_input(&format!("grep -A 1 MATCH \"{path}\"\nexit\n"));
+    assert_eq!(out, "MATCH\n2\n");
+    assert!(err.is_empty());
+}
+
+#[test]
+fn grep_case_insensitive_works_in_repl() {
+    let mut tmp = NamedTempFile::new().unwrap();
+    std::io::Write::write_all(&mut tmp, b"MiNiMaL\n").unwrap();
+    let path = tmp.path().to_string_lossy();
+
+    let (_code, out, err) = run_with_input(&format!("grep -i minimal \"{path}\"\nexit\n"));
+    assert_eq!(out, "MiNiMaL\n");
+    assert!(err.is_empty());
+}
+
+#[test]
 fn expansion_works_with_assignments_in_same_line() {
     let (_code, out, err) = run_with_input("x=ex y=it echo $x$y\nexit\n");
     assert_eq!(out.lines().next().unwrap(), "exit");
