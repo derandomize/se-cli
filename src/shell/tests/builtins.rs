@@ -2,7 +2,7 @@
 
 use std::io::Write;
 
-use super::super::builtins::{Builtin, run_builtin};
+use super::super::builtins::{Builtin, run_builtin, run_builtin_with_input};
 use super::super::types::{IoStreams, ShellControl};
 
 fn run(builtin: Builtin, args: &[&str]) -> (ShellControl, String, String) {
@@ -15,6 +15,23 @@ fn run(builtin: Builtin, args: &[&str]) -> (ShellControl, String, String) {
     };
 
     let control = run_builtin(builtin, &args, &mut io).unwrap();
+    (
+        control,
+        String::from_utf8_lossy(&out).to_string(),
+        String::from_utf8_lossy(&err).to_string(),
+    )
+}
+
+fn run_with_stdin(builtin: Builtin, args: &[&str], stdin: &[u8]) -> (ShellControl, String, String) {
+    let args: Vec<String> = args.iter().map(|s| s.to_string()).collect();
+    let mut out = Vec::new();
+    let mut err = Vec::new();
+    let mut io = IoStreams {
+        stdout: &mut out,
+        stderr: &mut err,
+    };
+
+    let control = run_builtin_with_input(builtin, &args, Some(stdin), &mut io).unwrap();
     (
         control,
         String::from_utf8_lossy(&out).to_string(),
@@ -131,4 +148,115 @@ fn wc_nonexistent_file_sets_exit_code_1() {
     assert!(out.is_empty());
     assert!(err.starts_with("wc:"));
     assert!(!err.to_lowercase().contains("os error"));
+}
+
+#[test]
+fn grep_basic_regex_prints_matching_lines() {
+    let mut tmp = tempfile::NamedTempFile::new().unwrap();
+    tmp.write_all(b"alpha\nBravo\ncharlie\n").unwrap();
+    let path = tmp.path().to_string_lossy().to_string();
+
+    let (control, out, err) = run(Builtin::Grep, &["a", &path]);
+    assert_eq!(control, ShellControl::Continue(0));
+    assert_eq!(out, "alpha\nBravo\ncharlie\n");
+    assert!(err.is_empty());
+}
+
+#[test]
+fn grep_case_insensitive_matches() {
+    let mut tmp = tempfile::NamedTempFile::new().unwrap();
+    tmp.write_all(b"MiNiMaL\n").unwrap();
+    let path = tmp.path().to_string_lossy().to_string();
+
+    let (control, out, err) = run(Builtin::Grep, &["-i", "minimal", &path]);
+    assert_eq!(control, ShellControl::Continue(0));
+    assert_eq!(out, "MiNiMaL\n");
+    assert!(err.is_empty());
+}
+
+#[test]
+fn grep_whole_word_does_not_match_substrings() {
+    let mut tmp = tempfile::NamedTempFile::new().unwrap();
+    tmp.write_all(b"foobar\nfoo\n").unwrap();
+    let path = tmp.path().to_string_lossy().to_string();
+
+    let (control, out, err) = run(Builtin::Grep, &["-w", "foo", &path]);
+    assert_eq!(control, ShellControl::Continue(0));
+    assert_eq!(out, "foo\n");
+    assert!(err.is_empty());
+}
+
+#[test]
+fn grep_after_context_prints_following_lines() {
+    let mut tmp = tempfile::NamedTempFile::new().unwrap();
+    tmp.write_all(b"0\n1\nMATCH\n3\n4\n").unwrap();
+    let path = tmp.path().to_string_lossy().to_string();
+
+    let (control, out, err) = run(Builtin::Grep, &["-A", "1", "MATCH", &path]);
+    assert_eq!(control, ShellControl::Continue(0));
+    assert_eq!(out, "MATCH\n3\n");
+    assert!(err.is_empty());
+}
+
+#[test]
+fn grep_after_context_overlaps_do_not_duplicate_lines() {
+    let mut tmp = tempfile::NamedTempFile::new().unwrap();
+    tmp.write_all(b"a\nMATCH\nMATCH\nd\n").unwrap();
+    let path = tmp.path().to_string_lossy().to_string();
+
+    let (control, out, err) = run(Builtin::Grep, &["-A", "1", "MATCH", &path]);
+    assert_eq!(control, ShellControl::Continue(0));
+    assert_eq!(out, "MATCH\nMATCH\nd\n");
+    assert!(err.is_empty());
+}
+
+#[test]
+fn grep_invalid_regex_is_error() {
+    let mut tmp = tempfile::NamedTempFile::new().unwrap();
+    tmp.write_all(b"hello\n").unwrap();
+    let path = tmp.path().to_string_lossy().to_string();
+
+    let (control, out, err) = run(Builtin::Grep, &["[", &path]);
+    assert_eq!(control, ShellControl::Continue(2));
+    assert!(out.is_empty());
+    assert!(err.to_lowercase().contains("invalid regex"));
+}
+
+#[test]
+fn grep_can_read_from_stdin_when_no_file_operand() {
+    let (control, out, err) = run_with_stdin(Builtin::Grep, &["foo"], b"foo\nbar\n");
+    assert_eq!(control, ShellControl::Continue(0));
+    assert_eq!(out, "foo\n");
+    assert!(err.is_empty());
+}
+
+#[test]
+fn grep_supports_multiple_files_and_prefixes_each_line() {
+    let mut tmp1 = tempfile::NamedTempFile::new().unwrap();
+    tmp1.write_all(b"x\nMATCH\n").unwrap();
+    let path1 = tmp1.path().to_string_lossy().to_string();
+
+    let mut tmp2 = tempfile::NamedTempFile::new().unwrap();
+    tmp2.write_all(b"MATCH\ny\n").unwrap();
+    let path2 = tmp2.path().to_string_lossy().to_string();
+
+    let (control, out, err) = run(Builtin::Grep, &["MATCH", &path1, &path2]);
+    assert_eq!(control, ShellControl::Continue(0));
+    assert_eq!(out, format!("{path1}:MATCH\n{path2}:MATCH\n"));
+    assert!(err.is_empty());
+}
+
+#[test]
+fn grep_multiple_files_returns_error_code_if_any_file_missing() {
+    let mut tmp = tempfile::NamedTempFile::new().unwrap();
+    tmp.write_all(b"MATCH\n").unwrap();
+    let path = tmp.path().to_string_lossy().to_string();
+
+    let (control, out, err) = run(
+        Builtin::Grep,
+        &["MATCH", &path, "definitely-not-a-real-file-12345.txt"],
+    );
+    assert_eq!(control, ShellControl::Continue(2));
+    assert!(out.contains(&format!("{path}:MATCH\n")));
+    assert!(err.starts_with("grep:"));
 }
