@@ -35,12 +35,16 @@ classDiagram
   class BuiltinRegistry
   class ExternalProgram
 
+  class Clap
+
   class Cat
   class Echo
   class Grep
   class Wc
   class Pwd
   class Exit
+
+  Grep ..> Clap : args parsing (clap)
 
   REPL --> Expander : line
   Expander --> Lexer : expanded line
